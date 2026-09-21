@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "[$TIMESTAMP] INFO: Executing NovaCode Cloud Startup Sequence..."
+ROOT="/kaggle/working/novacode-cloud"
+cd "$ROOT"
 
-cd /kaggle/working/novacode-cloud || cd .
-
-echo "[1/4] Starting vLLM Server..."
+bash scripts/detect_environment.sh
 bash scripts/start_vllm.sh
-
-echo "[2/4] Executing Healthcheck..."
 bash scripts/healthcheck.sh
-
-echo "[3/4] Initializing OpenCode Agent..."
+bash scripts/install_opencode.sh
 bash scripts/start_opencode.sh
 
-echo "[4/4] System Operational. Resource Status:"
-bash scripts/resource_monitor.sh
+# Final validation is intentionally real: failures propagate.
+bash tests/test_e2e.sh
 
 echo "=========================================="
-echo "NovaCode Cloud Backend Engine ACTIVE!"
-echo "Server URL: http://127.0.0.1:8000/v1"
+echo "NovaCode Cloud startup validation: PASS"
 echo "=========================================="
