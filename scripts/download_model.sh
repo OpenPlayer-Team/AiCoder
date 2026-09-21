@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-RUNTIME_ENV="/kaggle/working/runtime-selection.env"
-
-if [ -f "$RUNTIME_ENV" ]; then
-    source "$RUNTIME_ENV"
-else
-    SELECTED_MODEL="${PRIMARY_MODEL:-Qwen/Qwen2.5-Coder-7B-Instruct-AWQ}"
-fi
-
-echo "[$TIMESTAMP] INFO: Pre-fetching model metadata: $SELECTED_MODEL..."
+TS(){ date '+%Y-%m-%d %H:%M:%S'; }
+log(){ printf '[%s] [%s] [Model] %s\n' "$TS" "$1" "$2"; }
+RUNTIME_ENV="${RUNTIME_ENV:-/kaggle/working/runtime-selection.env}"
+source "$RUNTIME_ENV"
 export HF_HOME="${HF_HOME:-/kaggle/working/cache/huggingface}"
 mkdir -p "$HF_HOME"
 
-python3 -c "
-from huggingface_hub import snapshot_download
-model_id = '$SELECTED_MODEL'
-print(f'Fetching model metadata for {model_id}...')
-try:
-    snapshot_download(repo_id=model_id, allow_patterns=['*.json', 'tokenizer*'])
-    print('Model configuration verified successfully.')
-except Exception as e:
-    print(f'Warning: Pre-fetch warning: {e}')
-" || echo "[$TIMESTAMP] WARN: Model pre-fetch warning. vLLM will handle download on startup."
+[ -n "${SELECTED_MODEL:-}" ] || { log ERROR "SELECTED_MODEL is missing."; exit 1; }
 
-echo "[$TIMESTAMP] INFO: Model download step complete."
+python3 - "$SELECTED_MODEL" <<'PY'
+import os, sys
+from huggingface_hub import snapshot_download
+from transformers import AutoConfig, AutoTokenizer
+
+model=sys.argv[1]
+cache=os.environ.get("HF_HOME")
+path=snapshot_download(repo_id=model, cache_dir=cache)
+print("MODEL_SNAPSHOT="+path)
+config=AutoConfig.from_pretrained(model, cache_dir=cache)
+AutoTokenizer.from_pretrained(model, cache_dir=cache)
+print("MODEL_TYPE="+str(getattr(config,"model_type","unknown")))
+print("MODEL_CONFIG_OK=1")
+PY
+
+log INFO "Model files, configuration and tokenizer verified."
