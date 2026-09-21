@@ -1,1 +1,36 @@
-#!/usr/bin/env bash\nset -euo pipefail\n\nTS(){ date '+%Y-%m-%d %H:%M:%S'; }\nlog(){ printf '[%s] [%s] [Bootstrap] %s\n' "$TS" "$1" "$2"; }\nWORKDIR="${NOVACODE_WORKDIR:-/kaggle/working/novacode-cloud}"\nREPO="${GITHUB_REPO:-OpenPlayer-Team/AiCoder}"\nBRANCH="${NOVACODE_BRANCH:-novacode-cloud-implementation-8109331521118669701}"\nmkdir -p /kaggle/working/cache /kaggle/working/logs\n\nif [ ! -d "$WORKDIR/.git" ]; then\n  rm -rf "$WORKDIR"\n  mkdir -p "$(dirname "$WORKDIR")"\n  if [ -n "${GITHUB_TOKEN:-}" ]; then\n    AUTH="$(mktemp)"\n    chmod 600 "$AUTH"\n    printf 'https://%s:x-oauth-basic@github.com\n' "$GITHUB_TOKEN" > "$AUTH"\n    GIT_ASKPASS="$AUTH" git -c credential.helper= clone --branch "$BRANCH" "https://github.com/$REPO.git" "$WORKDIR"\n    rm -f "$AUTH"\n  else\n    git clone --branch "$BRANCH" "https://github.com/$REPO.git" "$WORKDIR"\n  fi\nfi\n\ncd "$WORKDIR"\nif [ -n "$(git status --porcelain)" ]; then\n  log WARN "Uncommitted local changes detected; preserving them and skipping automatic reset/checkout."\nelse\n  git fetch origin "$BRANCH"\n  git checkout "$BRANCH"\n  git pull --ff-only origin "$BRANCH"\nfi\n\nexport LOG_DIR="/kaggle/working/logs"\nbash scripts/full_setup.sh\nlog INFO "Bootstrap completed in $WORKDIR"\n
+#!/usr/bin/env bash
+set -euo pipefail
+
+TS(){ date '+%Y-%m-%d %H:%M:%S'; }
+log(){ printf '[%s] [%s] [Bootstrap] %s\n' "$TS" "$1" "$2"; }
+
+WORKDIR="${NOVACODE_WORKDIR:-/kaggle/working/novacode-cloud}"
+REPO="${GITHUB_REPO:-OpenPlayer-Team/AiCoder}"
+BRANCH="${NOVACODE_BRANCH:-novacode-cloud-implementation-8109331521118669701}"
+mkdir -p /kaggle/working/cache /kaggle/working/logs
+
+if [ ! -d "$WORKDIR/.git" ]; then
+  mkdir -p "$(dirname "$WORKDIR")"
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    CRED_FILE="$(mktemp)"
+    chmod 600 "$CRED_FILE"
+    printf 'https://x-oauth-basic:%s@github.com\n' "$GITHUB_TOKEN" > "$CRED_FILE"
+    git -c credential.helper="store --file=$CRED_FILE" clone --branch "$BRANCH" "https://github.com/$REPO.git" "$WORKDIR"
+    rm -f "$CRED_FILE"
+  else
+    git clone --branch "$BRANCH" "https://github.com/$REPO.git" "$WORKDIR"
+  fi
+fi
+
+cd "$WORKDIR"
+if [ -n "$(git status --porcelain)" ]; then
+  log WARN "Uncommitted changes detected; preserving them and skipping sync."
+else
+  git fetch origin "$BRANCH"
+  git checkout "$BRANCH"
+  git pull --ff-only origin "$BRANCH"
+fi
+
+export LOG_DIR="/kaggle/working/logs"
+bash scripts/full_setup.sh
+log INFO "Bootstrap completed."
