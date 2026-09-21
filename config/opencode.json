@@ -1,6 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "novacode/{env:OPENCODE_MODEL}",
   "provider": {
     "novacode": {
       "npm": "@ai-sdk/openai-compatible",
@@ -8,11 +7,6 @@
       "options": {
         "baseURL": "{env:VLLM_BASE_URL}",
         "apiKey": "{env:OPENAI_API_KEY}"
-      },
-      "models": {
-        "{env:OPENCODE_MODEL}": {
-          "name": "NovaCode selected model"
-        }
       }
     }
   }
