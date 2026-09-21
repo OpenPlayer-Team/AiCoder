@@ -81,7 +81,7 @@ git -C "$TMP_DIR" init -q
 git -C "$TMP_DIR" config user.email "novacode-e2e@example.invalid"
 git -C "$TMP_DIR" config user.name "NovaCode E2E"
 printf 'def add(a,b):\n    return a+b\n' > "$TMP_DIR/app.py"
-printf 'def test_add():\n    assert add(2,3)==5\n' > "$TMP_DIR/test_app.py"
+printf 'from app import add\n\ndef test_add():\n    assert add(2,3)==5\n' > "$TMP_DIR/test_app.py"
 git -C "$TMP_DIR" add . && git -C "$TMP_DIR" commit -qm "e2e fixture"
 
 if (cd "$TMP_DIR" && OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json" opencode run --model "novacode/$MODEL" "Inspect this tiny Python project. Run the existing test. Then create a file named e2e_result.txt containing exactly E2E_OK. Do not change any other file.") > "$LOG_DIR/opencode-e2e.log" 2>&1; then
