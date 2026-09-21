@@ -1,29 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "[$TIMESTAMP] INFO: Running Git Session Recovery & Sync..."
+TS(){ date '+%Y-%m-%d %H:%M:%S'; }
+log(){ printf '[%s] [%s] [Git] %s\n' "$TS" "$1" "$2"; }
 
-TOKEN="${GITHUB_TOKEN:-}"
-
-if [ -z "$TOKEN" ]; then
-    echo "[$TIMESTAMP] WARN: GITHUB_TOKEN environment variable not set. Operating in local read-only git mode."
+BRANCH="${NOVACODE_BRANCH:-novacode-cloud-implementation-8109331521118669701}"
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  log ERROR "Not inside a Git repository. Bootstrap must clone the repository first."
+  exit 1
 fi
 
-if [ -d ".git" ]; then
-    echo "[$TIMESTAMP] INFO: Git repository detected. Fetching latest remote commits..."
-    git fetch origin || echo "[$TIMESTAMP] WARN: Git fetch failed. Check network or credentials."
-
-    UNCOMMITTED=$(git status --porcelain)
-    if [ -n "$UNCOMMITTED" ]; then
-        echo "[$TIMESTAMP] WARN: Local uncommitted changes detected in Kaggle workspace!"
-        echo "$UNCOMMITTED"
-        echo "[$TIMESTAMP] INFO: Preserving uncommitted local work."
-    else
-        echo "[$TIMESTAMP] INFO: Working tree clean."
-    fi
-else
-    echo "[$TIMESTAMP] INFO: No git repository in current folder."
+if [ -n "$(git status --porcelain)" ]; then
+  log WARN "Uncommitted changes detected; preserving them. No reset/clean/forced checkout will run."
+  git status --short
+  exit 0
 fi
 
-echo "[$TIMESTAMP] INFO: Git session recovery completed."
+git fetch origin "$BRANCH"
+current="$(git branch --show-current)"
+if [ "$current" != "$BRANCH" ]; then
+  git checkout "$BRANCH"
+fi
+git pull --ff-only origin "$BRANCH"
+log INFO "Repository synchronized on $BRANCH."
