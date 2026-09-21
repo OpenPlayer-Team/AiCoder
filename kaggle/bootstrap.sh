@@ -1,36 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TS(){ date '+%Y-%m-%d %H:%M:%S'; }
-log(){ printf '[%s] [%s] [Bootstrap] %s\n' "$TS" "$1" "$2"; }
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+echo "[$TIMESTAMP] [INFO] [KAGGLE] Bootstrapping NovaCode Cloud Environment..."
 
-WORKDIR="${NOVACODE_WORKDIR:-/kaggle/working/novacode-cloud}"
-REPO="${GITHUB_REPO:-OpenPlayer-Team/AiCoder}"
-BRANCH="${NOVACODE_BRANCH:-novacode-cloud-implementation-8109331521118669701}"
-mkdir -p /kaggle/working/cache /kaggle/working/logs
+WORKDIR="/kaggle/working"
+mkdir -p "$WORKDIR/cache" "$WORKDIR/logs"
 
-if [ ! -d "$WORKDIR/.git" ]; then
-  mkdir -p "$(dirname "$WORKDIR")"
-  if [ -n "${GITHUB_TOKEN:-}" ]; then
-    CRED_FILE="$(mktemp)"
-    chmod 600 "$CRED_FILE"
-    printf 'https://x-oauth-basic:%s@github.com\n' "$GITHUB_TOKEN" > "$CRED_FILE"
-    git -c credential.helper="store --file=$CRED_FILE" clone --branch "$BRANCH" "https://github.com/$REPO.git" "$WORKDIR"
-    rm -f "$CRED_FILE"
-  else
-    git clone --branch "$BRANCH" "https://github.com/$REPO.git" "$WORKDIR"
-  fi
+TOKEN="${GITHUB_TOKEN:-}"
+
+if [ -z "$TOKEN" ]; then
+    if python3 -c "from kaggle_secrets import UserSecretsClient" &> /dev/null; then
+        echo "[$TIMESTAMP] [INFO] [KAGGLE] Attempting Kaggle Secrets retrieval..."
+        TOKEN=$(python3 -c "
+from kaggle_secrets import UserSecretsClient
+try:
+    print(UserSecretsClient().get_secret('GITHUB_TOKEN'))
+except Exception:
+    print('')
+" 2>/dev/null || echo "")
+    fi
+fi
+
+if [ -n "$TOKEN" ]; then
+    export GITHUB_TOKEN="$TOKEN"
+    echo "[$TIMESTAMP] [INFO] [KAGGLE] GITHUB_TOKEN authenticated."
 fi
 
 cd "$WORKDIR"
-if [ -n "$(git status --porcelain)" ]; then
-  log WARN "Uncommitted changes detected; preserving them and skipping sync."
-else
-  git fetch origin "$BRANCH"
-  git checkout "$BRANCH"
-  git pull --ff-only origin "$BRANCH"
+if [ ! -d "novacode-cloud" ]; then
+    echo "[$TIMESTAMP] [INFO] [KAGGLE] Cloning repository into $WORKDIR/novacode-cloud..."
+    git clone https://github.com/OpenPlayer-Team/AiCoder.git novacode-cloud || true
 fi
 
-export LOG_DIR="/kaggle/working/logs"
-bash scripts/full_setup.sh
-log INFO "Bootstrap completed."
+if [ -d "novacode-cloud" ]; then
+    cd novacode-cloud
+    bash scripts/full_setup.sh
+fi
+
+echo "[$TIMESTAMP] [INFO] [KAGGLE] Bootstrap execution complete."

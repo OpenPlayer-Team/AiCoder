@@ -1,67 +1,57 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TS() { date '+%Y-%m-%d %H:%M:%S'; }
-log() { printf '[%s] [%s] [GPU] %s\n' "$TS" "$1" "$2"; }
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+echo "[$TIMESTAMP] [INFO] [GPU] Detecting hardware capabilities and CUDA runtime..."
 
-GPU_COUNT=0
-GPU_NAMES="None"
-GPU_VRAM_MB=""
-TOTAL_VRAM_MB=0
-FREE_VRAM_MB=0
-DRIVER_VERSION="N/A"
-CUDA_VERSION="N/A"
-TORCH_CUDA_AVAILABLE="false"
+TORCH_CUDA_AVAILABLE=$(python3 -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "false")
 
-if command -v nvidia-smi >/dev/null 2>&1; then
-  mapfile -t GPU_ROWS < <(nvidia-smi --query-gpu=name,memory.total,memory.free,driver_version --format=csv,noheader,nounits)
-  GPU_COUNT="${#GPU_ROWS[@]}"
-  if [ "$GPU_COUNT" -gt 0 ]; then
-    names=()
-    vram=()
-    for row in "${GPU_ROWS[@]}"; do
-      IFS=',' read -r name total free driver <<< "$row"
-      name="$(xargs <<< "$name")"
-      total="$(xargs <<< "$total")"
-      free="$(xargs <<< "$free")"
-      driver="$(xargs <<< "$driver")"
-      names+=("$name")
-      vram+=("$total")
-      TOTAL_VRAM_MB=$((TOTAL_VRAM_MB + total))
-      FREE_VRAM_MB=$((FREE_VRAM_MB + free))
-      [ "$DRIVER_VERSION" = "N/A" ] && DRIVER_VERSION="$driver"
-    done
-    GPU_NAMES="$(IFS=';'; echo "${names[*]}")"
-    GPU_VRAM_MB="$(IFS=';'; echo "${vram[*]}")"
-    CUDA_VERSION="$(nvidia-smi | sed -n 's/.*CUDA Version: *\([0-9.]*\).*/\1/p' | head -n1)"
-    CUDA_VERSION="${CUDA_VERSION:-N/A}"
-  fi
+if ! command -v nvidia-smi &> /dev/null; then
+    echo "[$TIMESTAMP] [WARN] [GPU] nvidia-smi utility not found."
+    GPU_COUNT=0
+    GPU_NAMES="None"
+    GPU_VRAM_MB=0
+    TOTAL_VRAM_MB=0
+    FREE_VRAM_MB=0
+    DRIVER_VERSION="N/A"
+    CUDA_VERSION="N/A"
+    TENSOR_PARALLEL_SIZE=1
+else
+    GPU_COUNT=$(nvidia-smi --query-gpu=count --format=csv,noheader | head -n 1 | tr -d ' ' || echo 0)
+    GPU_NAMES=$(nvidia-smi --query-gpu=name --format=csv,noheader | tr '\n' ',' | sed 's/,$//' || echo "Unknown")
+    GPU_VRAM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n 1 | tr -d ' ' || echo 0)
+    TOTAL_VRAM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | awk '{s+=$1} END {print s}' || echo 0)
+    FREE_VRAM_MB=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | awk '{s+=$1} END {print s}' || echo 0)
+    DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 | tr -d ' ' || echo "N/A")
+    CUDA_VERSION=$(nvidia-smi | grep -oP 'CUDA Version: \K[0-9.]+' || echo "N/A")
+
+    if [ "$GPU_COUNT" -ge 2 ]; then
+        TENSOR_PARALLEL_SIZE=2
+    else
+        TENSOR_PARALLEL_SIZE=1
+    fi
 fi
 
-if python3 -c 'import torch; raise SystemExit(0 if torch.cuda.is_available() else 1)' >/dev/null 2>&1; then
-  TORCH_CUDA_AVAILABLE="true"
-fi
+echo "=========================================="
+echo "NovaCode Cloud Hardware Detection Summary"
+echo "=========================================="
+echo "GPU Count:            $GPU_COUNT"
+echo "GPU Models:           $GPU_NAMES"
+echo "VRAM Per GPU (MB):    $GPU_VRAM_MB"
+echo "Total VRAM (MB):      $TOTAL_VRAM_MB"
+echo "Free VRAM (MB):       $FREE_VRAM_MB"
+echo "Driver Version:       $DRIVER_VERSION"
+echo "CUDA Version:         $CUDA_VERSION"
+echo "PyTorch CUDA Status:  $TORCH_CUDA_AVAILABLE"
+echo "Tensor Parallel Size: $TENSOR_PARALLEL_SIZE"
+echo "=========================================="
 
-TP_SIZE=1
-[ "$GPU_COUNT" -ge 2 ] && TP_SIZE=2
-
-export GPU_COUNT GPU_NAMES GPU_VRAM_MB TOTAL_VRAM_MB FREE_VRAM_MB DRIVER_VERSION CUDA_VERSION TORCH_CUDA_AVAILABLE
-export DETECTED_GPU_COUNT="$GPU_COUNT"
-export DETECTED_GPU_NAME="$GPU_NAMES"
-export DETECTED_GPU_VRAM_MB="$GPU_VRAM_MB"
-export DETECTED_TOTAL_VRAM_MB="$TOTAL_VRAM_MB"
-export DETECTED_FREE_VRAM_MB="$FREE_VRAM_MB"
-export DETECTED_DRIVER_VERSION="$DRIVER_VERSION"
-export DETECTED_CUDA_VERSION="$CUDA_VERSION"
-export DETECTED_TORCH_CUDA_AVAILABLE="$TORCH_CUDA_AVAILABLE"
-export DETECTED_TENSOR_PARALLEL_SIZE="$TP_SIZE"
-
-log INFO "GPU_COUNT=$GPU_COUNT"
-log INFO "GPU_NAMES=$GPU_NAMES"
-log INFO "GPU_VRAM_MB=$GPU_VRAM_MB"
-log INFO "TOTAL_VRAM_MB=$TOTAL_VRAM_MB"
-log INFO "FREE_VRAM_MB=$FREE_VRAM_MB"
-log INFO "CUDA_VERSION=$CUDA_VERSION"
-log INFO "DRIVER_VERSION=$DRIVER_VERSION"
-log INFO "TORCH_CUDA_AVAILABLE=$TORCH_CUDA_AVAILABLE"
-log INFO "TENSOR_PARALLEL_SIZE=$TP_SIZE"
+export GPU_COUNT="$GPU_COUNT"
+export GPU_NAMES="$GPU_NAMES"
+export GPU_VRAM_MB="$GPU_VRAM_MB"
+export TOTAL_VRAM_MB="$TOTAL_VRAM_MB"
+export FREE_VRAM_MB="$FREE_VRAM_MB"
+export DRIVER_VERSION="$DRIVER_VERSION"
+export CUDA_VERSION="$CUDA_VERSION"
+export TORCH_CUDA_AVAILABLE="$TORCH_CUDA_AVAILABLE"
+export TENSOR_PARALLEL_SIZE="$TENSOR_PARALLEL_SIZE"

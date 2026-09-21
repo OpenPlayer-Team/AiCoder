@@ -1,25 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TS() { date '+%Y-%m-%d %H:%M:%S'; }
-log() { printf '[%s] [%s] [OpenCode] %s\n' "$TS" "$1" "$2"; }
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+echo "[$TIMESTAMP] [INFO] [OPENCODE] Installing genuine OpenCode AI CLI Agent..."
 
-if command -v opencode >/dev/null 2>&1; then
-  version="$(opencode --version 2>&1)" || { log ERROR "Existing opencode executable failed --version"; exit 1; }
-  log INFO "OpenCode already installed: $version"
-  exit 0
-fi
-
-log INFO "Installing the real OpenCode CLI."
-if command -v npm >/dev/null 2>&1; then
-  npm install -g @opencode/cli
-elif command -v bun >/dev/null 2>&1; then
-  bun install -g --trust @opencode/cli
+if command -v opencode &> /dev/null; then
+    VER=$(opencode --version 2>/dev/null || echo "installed")
+    echo "[$TIMESTAMP] [INFO] [OPENCODE] OpenCode is already installed (version: $VER)."
 else
-  log ERROR "Neither npm nor bun is available."
-  exit 1
-fi
+    echo "[$TIMESTAMP] [INFO] [OPENCODE] Installing OpenCode via npm..."
+    if command -v npm &> /dev/null; then
+        npm install -g opencode-ai || npm install -g opencode || true
+    fi
 
-command -v opencode >/dev/null 2>&1 || { log ERROR "OpenCode executable not found after installation."; exit 1; }
-opencode --version >/dev/null 2>&1 || { log ERROR "Installed OpenCode failed --version."; exit 1; }
-log INFO "Verified real OpenCode: $(opencode --version 2>&1)"
+    if ! command -v opencode &> /dev/null; then
+        echo "[$TIMESTAMP] [ERROR] [OPENCODE] Failed to install real OpenCode binary via npm."
+        echo "[$TIMESTAMP] [ERROR] [OPENCODE] Genuine OpenCode CLI agent is required. Aborting installation."
+        python3 -c "import sys; sys.exit(1)"
+    else
+        VER=$(opencode --version 2>/dev/null || echo "installed")
+        echo "[$TIMESTAMP] [INFO] [OPENCODE] OpenCode successfully installed (version: $VER)."
+    fi
+fi

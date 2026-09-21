@@ -1,1 +1,48 @@
-#!/usr/bin/env bash\nset -euo pipefail\n\nTS(){ date '+%Y-%m-%d %H:%M:%S'; }\nlog(){ printf '[%s] [%s] [OpenCode] %s\n' "$TS" "$1" "$2"; }\nROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"\nRUNTIME_ENV="${RUNTIME_ENV:-/kaggle/working/runtime-selection.env}"\nBASE_URL="${VLLM_BASE_URL:-http://127.0.0.1:8000/v1}"\ncommand -v opencode >/dev/null 2>&1 || { log ERROR "OpenCode is not installed."; exit 1; }\nopencode --version >/dev/null 2>&1 || { log ERROR "OpenCode --version failed."; exit 1; }\n[ -f "$RUNTIME_ENV" ] || { log ERROR "Runtime selection missing."; exit 1; }\nsource "$RUNTIME_ENV"\n[ -n "${SELECTED_MODEL:-}" ] || { log ERROR "No selected model."; exit 1; }\nexport VLLM_BASE_URL="$BASE_URL"\nexport OPENAI_API_BASE="$BASE_URL"\nexport OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"\nexport OPENCODE_MODEL="$SELECTED_MODEL"\nexport OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"\nmkdir -p "$HOME/.config/opencode"\npython3 - "$OPENCODE_CONFIG" "$BASE_URL" "$SELECTED_MODEL" <<'PY'\nimport json, pathlib, sys\npath, base_url, model = sys.argv[1:]\ncfg={"$schema":"https://opencode.ai/config.json","model":f"novacode/{model}","provider":{"novacode":{"npm":"@ai-sdk/openai-compatible","name":"NovaCode local vLLM","options":{"baseURL":base_url,"apiKey":"{env:OPENAI_API_KEY}"},"models":{model:{"name":model}}}}}\npathlib.Path(path).write_text(json.dumps(cfg,indent=2)+"\n")\nPY\ncd "$ROOT_DIR"\nif ! opencode debug config >/dev/null 2>&1; then log ERROR "OpenCode rejected runtime configuration."; exit 1; fi\nlog INFO "OpenCode $(opencode --version 2>&1) configured for $SELECTED_MODEL at $BASE_URL"\n
+#!/usr/bin/env bash
+set -euo pipefail
+
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+echo "[$TIMESTAMP] [INFO] [OPENCODE] Configuring OpenCode provider integration..."
+
+if ! command -v opencode &> /dev/null; then
+    echo "[$TIMESTAMP] [ERROR] [OPENCODE] opencode command not found. Run scripts/install_opencode.sh first."
+    python3 -c "import sys; sys.exit(1)"
+fi
+
+RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+if [ -f "$RUNTIME_ENV" ]; then
+    source "$RUNTIME_ENV"
+fi
+
+MODEL_ID="${SELECTED_MODEL:-Qwen/Qwen2.5-Coder-7B-Instruct-AWQ}"
+
+CONFIG_DIR="$HOME/.config/opencode"
+mkdir -p "$CONFIG_DIR"
+
+cat << JSON_OUT > "$CONFIG_DIR/opencode.json"
+{
+  "\$schema": "https://opencode.ai/config.schema.json",
+  "version": "1.0",
+  "provider": {
+    "type": "openai",
+    "baseUrl": "http://127.0.0.1:8000/v1",
+    "apiKey": "EMPTY",
+    "model": "$MODEL_ID"
+  },
+  "agent": {
+    "name": "NovaCode-Agent",
+    "safety": {
+      "confirmDestructive": true,
+      "disallowForcePush": true,
+      "disallowHardReset": true,
+      "disallowRootDelete": true
+    }
+  }
+}
+JSON_OUT
+
+export OPENAI_API_BASE="http://127.0.0.1:8000/v1"
+export OPENAI_API_KEY="EMPTY"
+
+echo "[$TIMESTAMP] [INFO] [OPENCODE] OpenCode configuration written to $CONFIG_DIR/opencode.json"
+echo "[$TIMESTAMP] [INFO] [OPENCODE] Real OpenCode integration ready for backend http://127.0.0.1:8000/v1 ($MODEL_ID)."

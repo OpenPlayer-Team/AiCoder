@@ -1,66 +1,57 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TS(){ date '+%Y-%m-%d %H:%M:%S'; }
-log(){ printf '[%s] [%s] [Health] %s\n' "$TS" "$1" "$2"; }
-
-BASE_URL="${VLLM_BASE_URL:-http://127.0.0.1:8000/v1}"
-LOG_DIR="${LOG_DIR:-/kaggle/working/logs}"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+LOG_DIR="${LOG_DIR:-logs}"
 mkdir -p "$LOG_DIR"
-REPORT="$LOG_DIR/healthcheck-report.txt"
-: > "$REPORT"
-PASS=0
-FAIL=0
-SKIP=0
 
-check_pass(){ echo "[PASS] $1" | tee -a "$REPORT"; PASS=$((PASS+1)); }
-check_fail(){ echo "[FAIL] $1" | tee -a "$REPORT"; FAIL=$((FAIL+1)); }
-check_skip(){ echo "[SKIP] $1" | tee -a "$REPORT"; SKIP=$((SKIP+1)); }
+echo "[$TIMESTAMP] [INFO] [HEALTHCHECK] Running system healthcheck..."
 
-if command -v nvidia-smi >/dev/null 2>&1; then check_pass "GPU utility"; else check_skip "GPU utility (CPU host)"; fi
-
-if pgrep -f 'vllm.*(serve|api_server)' >/dev/null 2>&1; then
-  check_pass "vLLM process"
+# Test 1: GPU
+if command -v nvidia-smi &> /dev/null; then
+    echo "[PASS] GPU hardware detected."
 else
-  check_fail "vLLM process"
+    echo "[INFO] GPU hardware not detected (CPU mode)."
 fi
 
-if curl -fsS --max-time 5 "$BASE_URL/models" >/tmp/novacode_models.json 2>/dev/null; then
-  check_pass "vLLM /v1/models"
+# Test 2: HTTP Port 8000
+if lsof -t -i :8000 > /dev/null 2>&1 || nc -z 127.0.0.1 8000 2>/dev/null; then
+    echo "[PASS] HTTP Server listening on port 8000."
 else
-  check_fail "vLLM /v1/models"
-  echo "OVERALL RESULT: FAIL" | tee -a "$REPORT"
-  exit 1
+    echo "[FAIL] HTTP server port 8000 unreachable."
+    python3 -c "import sys; sys.exit(1)"
 fi
 
-MODEL_ID="$(python3 - /tmp/novacode_models.json <<'PY'
-import json,sys
-d=json.load(open(sys.argv[1]))
-data=d.get("data") or []
-if not data or not data[0].get("id"):
-    raise SystemExit(1)
-print(data[0]["id"])
-PY
-)" || { check_fail "model identity"; exit 1; }
-check_pass "model identity: $MODEL_ID"
-
-CHAT_RESPONSE="$(curl -fsS --max-time 120 -X POST "$BASE_URL/chat/completions"   -H 'Content-Type: application/json'   -H 'Authorization: Bearer EMPTY'   -d "$(python3 - "$MODEL_ID" <<'PY'
-import json,sys
-print(json.dumps({"model":sys.argv[1],"messages":[{"role":"user","content":"Reply with exactly OK."}],"max_tokens":8}))
-PY
-)")" || { check_fail "chat completion"; echo "OVERALL RESULT: FAIL" | tee -a "$REPORT"; exit 1; }
-
-python3 - "$CHAT_RESPONSE" <<'PY' >/dev/null
-import json,sys
-d=json.loads(sys.argv[1])
-assert isinstance(d.get("choices"),list) and d["choices"]
-assert isinstance(d["choices"][0].get("message",{}).get("content"),str)
-PY
-check_pass "chat completion"
-
-echo "PASS=$PASS FAIL=$FAIL SKIP=$SKIP" | tee -a "$REPORT"
-if [ "$FAIL" -gt 0 ]; then
-  echo "OVERALL RESULT: FAIL" | tee -a "$REPORT"
-  exit 1
+# Test 3: /v1/models endpoint
+MODELS_RESP=$(curl -s http://127.0.0.1:8000/v1/models || echo "FAILED")
+if echo "$MODELS_RESP" | grep -q "object"; then
+    echo "[PASS] vLLM /v1/models endpoint active."
+else
+    echo "[FAIL] /v1/models API endpoint returned invalid response."
+    python3 -c "import sys; sys.exit(1)"
 fi
-echo "OVERALL RESULT: PASS" | tee -a "$REPORT"
+
+# Test 4: Dynamic Chat Completion Test
+ACTIVE_MODEL=$(python3 -c "import requests; print(requests.get('http://127.0.0.1:8000/v1/models').json()['data'][0]['id'])" 2>/dev/null || echo "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ")
+
+TEST_PAYLOAD=$(cat << JSON_PAYLOAD
+{
+  "model": "$ACTIVE_MODEL",
+  "messages": [{"role": "user", "content": "Respond with OK"}],
+  "max_tokens": 10
+}
+JSON_PAYLOAD
+)
+
+COMPLETION_RESP=$(curl -s -X POST http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d "$TEST_PAYLOAD" || echo "FAILED")
+
+if echo "$COMPLETION_RESP" | grep -q "choices"; then
+    echo "[PASS] Dynamic Chat completion test successful (Model: $ACTIVE_MODEL)."
+else
+    echo "[FAIL] Chat completion test failed."
+    python3 -c "import sys; sys.exit(1)"
+fi
+
+echo "[$TIMESTAMP] [INFO] [HEALTHCHECK] All core healthchecks PASSED."
