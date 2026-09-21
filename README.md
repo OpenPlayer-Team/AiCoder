@@ -1,52 +1,79 @@
-# NovaCode Cloud — Autonomous AI Coding Environment
+# NovaCode Cloud
 
-**NovaCode Cloud** turns low-spec client PCs (e.g., Windows 10/11, 8 GB RAM, NVIDIA GT 730 4GB) into high-performance AI coding stations by leveraging free remote Kaggle GPU compute (up to Dual NVIDIA T4s), vLLM high-throughput inference, Qwen3/2.5-Coder LLMs, and OpenCode AI agent work environments.
+NovaCode Cloud is a Kaggle-backed AI coding environment for low-spec clients. The client does not run the LLM locally: Git/GitHub and project editing remain local, while the Kaggle runtime hosts vLLM and the OpenCode agent.
 
-> **Disclaimer on Kaggle Limits:** Kaggle Free is not an unlimited GPU service. GPU availability, session durations (up to 12 hours max per session, 30 hours/week total GPU quota), and hardware allocations are governed by Kaggle terms. NovaCode Cloud is architected to be 100% session-resilient and instantly recoverable after total VM resets.
+> **Validation status:** this branch contains the Phase 2 hardening implementation, but the repository cannot truthfully claim `OPERATIONAL` until `tests/test_e2e.sh` has been executed in a real Kaggle GPU runtime and its report shows PASS.
 
----
+## Architecture
 
-## Architecture Overview
+Windows client -> GitHub -> Kaggle ephemeral runtime -> vLLM OpenAI-compatible API -> OpenCode -> project files/Git.
 
+GitHub is the persistent source of truth. Kaggle `/kaggle/working` is disposable.
 
+## Runtime
 
----
+The bootstrap detects Python, PyTorch/CUDA, NVIDIA GPUs, VRAM and available vLLM/OpenCode installations. Model selection is capability-based and currently uses Qwen2.5-Coder variants with Hermes tool parsing for Qwen2.5. vLLM binds to `127.0.0.1:8000` by default.
 
-## Key Features
+The installer deliberately avoids replacing a Kaggle-provided CUDA/PyTorch stack unless PyTorch is missing.
 
-- **Zero Local LLM Requirement:** All heavy ML execution, tensor processing, and model weights stay in the remote Kaggle cloud.
-- **Dynamic Hardware Adaptation:** Auto-detects 1x or 2x GPUs, total VRAM, and RAM to set , quantization (AWQ/GPTQ/Unquantized), and context lengths (8K to 32K).
-- **Session Resilience:** Automated setup scripts re-establish state from GitHub without losing uncommitted progress or corrupting local changes.
-- **Strict Security First:** Token handling via Kaggle Secrets; no API keys or credentials saved in code, logs, notebooks, or git repository history.
-- **Open-Source & Free-Tier First:** Built entirely on open-weight models, open-source vLLM, and OpenCode, with zero compulsory paid API subscriptions.
+## Real validation
 
----
+Run on the GPU runtime:
 
-## Quick Setup Guide
+```bash
+bash kaggle/bootstrap.sh
+bash kaggle/startup.sh
+```
 
-### 1. GitHub Setup
-1. Fork or clone this repository to your GitHub account.
-2. Generate a GitHub Fine-Grained Personal Access Token with  and  permissions.
+The end-to-end report is written to:
 
-### 2. Kaggle Setup
-1. Open a new Kaggle Notebook.
-2. In Settings, set Accelerator to GPU T4 x2 (or GPU P100).
-3. In Add-ons -> Secrets, add the secret  with your fine-grained token.
-4. Execute bootstrap script in notebook cell.
+```
+/kaggle/working/logs/e2e-report.txt
+```
 
-### 3. Local Windows Client
-1. Edit code locally using VS Code and standard Git workflows (, , [?2004h(B)0[?1049h[1;24r[m[4l[39;49m[?1h=[?1h=[?25l[39;49m[m[H[J[22;34H[0;7m[ Reading... ][m[22;32H[0;7m[ Read 12 lines ][m[34h[?25h[24;1H[?1049l
-[?1l>[?2004l, ).
-2. The remote Kaggle backend executes heavy builds, model inference, and code generation.
+The E2E suite verifies:
 
----
+- GPU/PyTorch capability
+- vLLM installation and model identity
+- real chat completion
+- real SSE streaming
+- real tool calling
+- real OpenCode installation
+- OpenCode custom OpenAI-compatible provider configuration
+- OpenCode -> vLLM -> model execution
+- an isolated coding task in a temporary Git repository
 
-## Directory Structure
+A failed critical step produces `OVERALL RESULT: FAIL`. There are no fake OpenCode executables and no success-on-warning inference checks.
 
+## OpenCode
 
+The current OpenCode documentation supports custom OpenAI-compatible providers through `@ai-sdk/openai-compatible`, `options.baseURL`, and a provider/model configuration. The runtime script generates a model-specific configuration after querying the selected vLLM model.
 
----
+OpenCode is installed using the current CLI package `@opencode/cli` when npm is available, with Bun as the alternative.
 
-## License
+## Git safety
 
-Distributed under the MIT License.
+Automatic recovery never runs:
+
+- `git reset --hard`
+- `git clean -fd`
+- `git checkout -- .`
+- force push
+
+If uncommitted changes are detected, synchronization stops and the changes are preserved.
+
+## Secrets
+
+Put GitHub credentials in Kaggle Secrets/environment variables. Never commit PATs, private keys or real credentials. The repository contains only placeholders.
+
+## Kaggle limitations
+
+Kaggle GPU availability, session duration, quota and accelerator choices are platform-controlled and can change. NovaCode Cloud therefore detects the actual runtime instead of assuming a particular GPU count or quota.
+
+## Windows client
+
+The Windows side is intentionally lightweight. It should perform Git/project operations and invoke the remote workflow; it is not expected to host the LLM.
+
+## Important limitation
+
+Static repository inspection cannot prove a live GPU/model/OpenCode chain. Only a real Kaggle run of `tests/test_e2e.sh` can establish the final operational status.
