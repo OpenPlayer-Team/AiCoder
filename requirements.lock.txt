@@ -1,13 +1,9 @@
-# NovaCode Cloud - Pinned Dependencies
-vllm==0.6.3.post1
-torch==2.4.0
-transformers==4.45.2
-huggingface-hub==0.25.2
-accelerate==0.34.2
-openai==1.51.0
-fastapi==0.115.0
-uvicorn==0.31.0
-pydantic==2.9.2
-requests==2.32.3
-jinja2==3.1.4
-numpy==1.26.4
+# NovaCode Cloud runtime compatibility constraints.
+# Kaggle's preinstalled CUDA/PyTorch stack is authoritative; install_dependencies.sh
+# does NOT blindly install this file. These are minimum Python package families
+# expected by the scripts when the corresponding packages are absent.
+transformers>=4.45
+huggingface-hub>=0.25
+accelerate>=0.34
+openai>=1.50
+requests>=2.32
