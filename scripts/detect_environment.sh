@@ -1,59 +1,79 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "[$TIMESTAMP] INFO: Running Environment Capability Assessment..."
+TS() { date '+%Y-%m-%d %H:%M:%S'; }
+log() { printf '[%s] [%s] [Runtime] %s\n' "$TS" "$1" "$2"; }
 
-source "$(dirname "$0")/detect_gpu.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/detect_gpu.sh"
 
-SYSTEM_RAM_MB=$(free -m | awk '/^Mem:/{print $2}' || echo 0)
-echo "[$TIMESTAMP] INFO: Detected System RAM: ${SYSTEM_RAM_MB} MB"
+SYSTEM_RAM_MB="$(free -m | awk '/^Mem:/{print $2}' || echo 0)"
+PYTHON_VERSION="$(python3 --version 2>&1 || true)"
+TORCH_VERSION="$(python3 -c 'import torch; print(torch.__version__)' 2>/dev/null || echo unavailable)"
+VLLM_VERSION="$(python3 -c 'import vllm; print(vllm.__version__)' 2>/dev/null || echo unavailable)"
+TRANSFORMERS_VERSION="$(python3 -c 'import transformers; print(transformers.__version__)' 2>/dev/null || echo unavailable)"
 
-if [ "$DETECTED_TOTAL_VRAM_MB" -ge 24000 ]; then
-    SELECTED_MODEL="Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
-    SELECTED_QUANTIZATION="awq"
-    SELECTED_MAX_MODEL_LEN=32768
-    SELECTED_GPU_MEMORY_UTILIZATION=0.90
-    REASON="High VRAM (Dual T4 or >=24GB VRAM) detected. Allocating primary 7B AWQ model with full 32K context window."
-elif [ "$DETECTED_TOTAL_VRAM_MB" -ge 12000 ]; then
-    SELECTED_MODEL="Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
-    SELECTED_QUANTIZATION="awq"
-    SELECTED_MAX_MODEL_LEN=16384
-    SELECTED_GPU_MEMORY_UTILIZATION=0.85
-    REASON="Single T4 or Moderate VRAM (>=12GB) detected. Allocating 7B AWQ model with 16K context window."
-elif [ "$DETECTED_TOTAL_VRAM_MB" -ge 6000 ]; then
-    SELECTED_MODEL="Qwen/Qwen2.5-Coder-3B-Instruct"
-    SELECTED_QUANTIZATION="none"
-    SELECTED_MAX_MODEL_LEN=16384
-    SELECTED_GPU_MEMORY_UTILIZATION=0.85
-    REASON="Low VRAM (>=6GB) detected. Falling back to Qwen2.5-Coder-3B-Instruct."
-else
-    SELECTED_MODEL="Qwen/Qwen2.5-Coder-1.5B-Instruct"
-    SELECTED_QUANTIZATION="none"
-    SELECTED_MAX_MODEL_LEN=8192
-    SELECTED_GPU_MEMORY_UTILIZATION=0.80
-    REASON="Minimal GPU or CPU-only environment detected. Falling back to Qwen2.5-Coder-1.5B-Instruct."
+PRIMARY_MODEL="${PRIMARY_MODEL:-Qwen/Qwen2.5-Coder-7B-Instruct-AWQ}"
+FALLBACK_MODEL="${FALLBACK_MODEL:-Qwen/Qwen2.5-Coder-3B-Instruct}"
+SMALL_MODEL="${SMALL_MODEL:-Qwen/Qwen2.5-Coder-1.5B-Instruct}"
+
+SELECTED_MODEL="$SMALL_MODEL"
+SELECTED_QUANTIZATION="none"
+SELECTED_MAX_MODEL_LEN=8192
+SELECTED_GPU_MEMORY_UTILIZATION=0.80
+SELECTION_REASON="No compatible GPU capacity detected."
+TOOL_CALL_PARSER="hermes"
+
+if [ "$GPU_COUNT" -ge 2 ] && [ "$TOTAL_VRAM_MB" -ge 24000 ] && [ "$TORCH_CUDA_AVAILABLE" = "true" ]; then
+  SELECTED_MODEL="$PRIMARY_MODEL"
+  SELECTED_QUANTIZATION="awq"
+  SELECTED_MAX_MODEL_LEN=32768
+  SELECTED_GPU_MEMORY_UTILIZATION=0.90
+  SELECTION_REASON="Two or more CUDA GPUs with at least 24GB aggregate VRAM."
+elif [ "$GPU_COUNT" -ge 1 ] && [ "$TOTAL_VRAM_MB" -ge 12000 ] && [ "$TORCH_CUDA_AVAILABLE" = "true" ]; then
+  SELECTED_MODEL="$PRIMARY_MODEL"
+  SELECTED_QUANTIZATION="awq"
+  SELECTED_MAX_MODEL_LEN=16384
+  SELECTED_GPU_MEMORY_UTILIZATION=0.85
+  SELECTION_REASON="Single compatible CUDA GPU with at least 12GB VRAM."
+elif [ "$GPU_COUNT" -ge 1 ] && [ "$TOTAL_VRAM_MB" -ge 6000 ] && [ "$TORCH_CUDA_AVAILABLE" = "true" ]; then
+  SELECTED_MODEL="$FALLBACK_MODEL"
+  SELECTED_QUANTIZATION="none"
+  SELECTED_MAX_MODEL_LEN=8192
+  SELECTED_GPU_MEMORY_UTILIZATION=0.80
+  SELECTION_REASON="Single compatible CUDA GPU with at least 6GB VRAM."
 fi
 
-OUTPUT_ENV="/kaggle/working/runtime-selection.env"
+OUTPUT_ENV="${RUNTIME_ENV:-/kaggle/working/runtime-selection.env}"
 mkdir -p "$(dirname "$OUTPUT_ENV")"
-
-cat << ENV_OUT > "$OUTPUT_ENV"
+cat > "$OUTPUT_ENV" <<EOF
 DETECTED_GPU_NAME="$DETECTED_GPU_NAME"
 DETECTED_GPU_COUNT="$DETECTED_GPU_COUNT"
+DETECTED_GPU_VRAM_MB="$DETECTED_GPU_VRAM_MB"
 DETECTED_TOTAL_VRAM_MB="$DETECTED_TOTAL_VRAM_MB"
 DETECTED_FREE_VRAM_MB="$DETECTED_FREE_VRAM_MB"
 DETECTED_SYSTEM_RAM_MB="$SYSTEM_RAM_MB"
 DETECTED_CUDA_VERSION="$DETECTED_CUDA_VERSION"
-
+DETECTED_DRIVER_VERSION="$DETECTED_DRIVER_VERSION"
+DETECTED_TORCH_CUDA_AVAILABLE="$DETECTED_TORCH_CUDA_AVAILABLE"
+DETECTED_PYTHON_VERSION="$PYTHON_VERSION"
+DETECTED_TORCH_VERSION="$TORCH_VERSION"
+DETECTED_VLLM_VERSION="$VLLM_VERSION"
+DETECTED_TRANSFORMERS_VERSION="$TRANSFORMERS_VERSION"
 SELECTED_MODEL="$SELECTED_MODEL"
 SELECTED_QUANTIZATION="$SELECTED_QUANTIZATION"
 SELECTED_TENSOR_PARALLEL_SIZE="$DETECTED_TENSOR_PARALLEL_SIZE"
 SELECTED_GPU_MEMORY_UTILIZATION="$SELECTED_GPU_MEMORY_UTILIZATION"
 SELECTED_MAX_MODEL_LEN="$SELECTED_MAX_MODEL_LEN"
-SELECTION_REASON="$REASON"
-ENV_OUT
+SELECTED_TOOL_CALL_PARSER="$TOOL_CALL_PARSER"
+SELECTION_REASON="$SELECTION_REASON"
+VLLM_BASE_URL="${VLLM_BASE_URL:-http://127.0.0.1:8000/v1}"
+EOF
 
-echo "[$TIMESTAMP] INFO: Selection Complete -> $SELECTED_MODEL"
-echo "[$TIMESTAMP] INFO: Reason: $REASON"
-echo "[$TIMESTAMP] INFO: Saved configuration to $OUTPUT_ENV"
+log INFO "GPU_COUNT=$GPU_COUNT"
+log INFO "TOTAL_VRAM_MB=$TOTAL_VRAM_MB"
+log INFO "TORCH_CUDA_AVAILABLE=$TORCH_CUDA_AVAILABLE"
+log INFO "SELECTED_MODEL=$SELECTED_MODEL"
+log INFO "SELECTED_TENSOR_PARALLEL_SIZE=$DETECTED_TENSOR_PARALLEL_SIZE"
+log INFO "SELECTED_MAX_MODEL_LEN=$SELECTED_MAX_MODEL_LEN"
+log INFO "SELECTION_REASON=$SELECTION_REASON"
