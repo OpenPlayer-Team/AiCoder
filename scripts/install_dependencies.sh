@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "[$TIMESTAMP] INFO: Installing core dependencies..."
+TS(){ date '+%Y-%m-%d %H:%M:%S'; }
+log(){ printf '[%s] [%s] [Deps] %s\n' "$TS" "$1" "$2"; }
 
 export HF_HOME="${HF_HOME:-/kaggle/working/cache/huggingface}"
 mkdir -p "$HF_HOME"
 
-python3 -m pip install --upgrade pip setuptools wheel
+PYTHON_VERSION="$(python3 -c 'import sys; print(".".join(map(str,sys.version_info[:3])))')"
+log INFO "Python $PYTHON_VERSION"
 
-if [ -f "requirements.lock.txt" ]; then
-    echo "[$TIMESTAMP] INFO: Installing locked dependencies from requirements.lock.txt..."
-    python3 -m pip install -r requirements.lock.txt
+if python3 -c 'import torch' >/dev/null 2>&1; then
+  log INFO "Using preinstalled PyTorch: $(python3 -c 'import torch; print(torch.__version__)')"
 else
-    echo "[$TIMESTAMP] WARN: requirements.lock.txt not found! Installing standard runtime packages..."
-    python3 -m pip install torch transformers huggingface-hub accelerate openai fastapi uvicorn pydantic requests
+  log INFO "PyTorch not present; installing the environment default package."
+  python3 -m pip install torch
 fi
 
-echo "[$TIMESTAMP] INFO: Dependencies installed successfully."
+python3 -m pip install -U "transformers>=4.45" "huggingface-hub>=0.25" "accelerate>=0.34" "openai>=1.50" requests
+log INFO "Core Python dependencies ready; CUDA/PyTorch are not forcibly replaced."
