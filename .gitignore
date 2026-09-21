@@ -1,0 +1,32 @@
+# Environment and Configuration Secrets
+.env
+*.env
+!.env.example
+!config/*.example
+secrets/
+credentials/
+*.key
+*.pem
+token*
+
+# Kaggle / Runtime Dynamic State
+runtime-selection.env
+/kaggle/working/runtime-selection.env
+*.log
+logs/
+
+# Cache directories & downloads
+cache/
+.cache/
+__pycache__/
+*.pyc
+huggingface/
+
+# LLM Models and Weights (DO NOT COMMIT MODELS TO GIT)
+models/*
+!models/README.md
+
+# IDE / OS specific
+.vscode/
+.idea/
+.DS_Store
