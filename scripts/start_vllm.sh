@@ -27,11 +27,8 @@ if pgrep -f "vllm.entrypoints.openai.api_server" > /dev/null; then
     "$(dirname "$0")/stop_vllm.sh"
 fi
 
-# Fallback context windows to handle VRAM OOM during model load
-CONTEXT_WINDOW_ATTEMPTS=("$INITIAL_CONTEXT" 24576 16384 8192)
-SUCCESS=false
-
-for CTX in "${CONTEXT_WINDOW_ATTEMPTS[@]}"; do
+launch_vllm_with_context() {
+    local CTX=$1
     echo "[$TIMESTAMP] [INFO] [VLLM] Attempting server launch with max_model_len=$CTX..."
 
     EXTRA_FLAGS=()
@@ -69,11 +66,22 @@ for CTX in "${CONTEXT_WINDOW_ATTEMPTS[@]}"; do
 
     if [ "$READY" = true ]; then
         echo "[$TIMESTAMP] [INFO] [VLLM] vLLM Server successfully started on http://127.0.0.1:8000/v1 (Context: $CTX)"
-        SUCCESS=true
-        break
+        return 0
     else
         echo "[$TIMESTAMP] [WARN] [VLLM] Server failed to start with context $CTX. Cleaning up and attempting lower context window..."
         "$(dirname "$0")/stop_vllm.sh"
+        return 1
+    fi
+}
+
+# Fallback context windows to handle VRAM OOM during model load
+CONTEXT_WINDOW_ATTEMPTS=("$INITIAL_CONTEXT" 24576 16384 8192)
+SUCCESS=false
+
+for CTX in "${CONTEXT_WINDOW_ATTEMPTS[@]}"; do
+    if launch_vllm_with_context "$CTX"; then
+        SUCCESS=true
+        break
     fi
 done
 
