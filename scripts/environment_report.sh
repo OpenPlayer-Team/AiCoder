@@ -2,7 +2,11 @@
 set -euo pipefail
 
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+if [ -f "/kaggle/working/runtime-selection.env" ]; then
+    RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+else
+    RUNTIME_ENV="runtime-selection.env"
+fi
 
 if [ -f "$RUNTIME_ENV" ]; then
     source "$RUNTIME_ENV"

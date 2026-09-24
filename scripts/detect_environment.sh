@@ -35,8 +35,12 @@ else
     REASON="Minimal GPU VRAM or CPU environment detected. Selected Qwen2.5-Coder-1.5B-Instruct."
 fi
 
-OUTPUT_ENV="/kaggle/working/runtime-selection.env"
-mkdir -p "$(dirname "$OUTPUT_ENV")"
+if mkdir -p "/kaggle/working" 2>/dev/null; then
+    OUTPUT_ENV="/kaggle/working/runtime-selection.env"
+else
+    OUTPUT_ENV="runtime-selection.env"
+    mkdir -p "$(dirname "$OUTPUT_ENV")"
+fi
 
 cat << ENV_OUT > "$OUTPUT_ENV"
 # NovaCode Cloud - Auto-generated runtime environment
