@@ -2,7 +2,11 @@
 set -euo pipefail
 
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+if [ -f "/kaggle/working/runtime-selection.env" ]; then
+    RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+else
+    RUNTIME_ENV="runtime-selection.env"
+fi
 
 if [ -f "$RUNTIME_ENV" ]; then
     source "$RUNTIME_ENV"
@@ -11,7 +15,11 @@ else
 fi
 
 echo "[$TIMESTAMP] [INFO] [MODEL] Verifying & downloading model weights/config for: $SELECTED_MODEL..."
-export HF_HOME="${HF_HOME:-/kaggle/working/cache/huggingface}"
+if mkdir -p "/kaggle/working" 2>/dev/null; then
+    export HF_HOME="${HF_HOME:-/kaggle/working/cache/huggingface}"
+else
+    export HF_HOME="${HF_HOME:-cache/huggingface}"
+fi
 mkdir -p "$HF_HOME"
 
 python3 -c "

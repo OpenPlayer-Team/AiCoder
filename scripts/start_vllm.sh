@@ -6,7 +6,11 @@ LOG_DIR="${LOG_DIR:-logs}"
 mkdir -p "$LOG_DIR"
 VLLM_LOG="$LOG_DIR/vllm.log"
 
-RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+if [ -f "/kaggle/working/runtime-selection.env" ]; then
+    RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+else
+    RUNTIME_ENV="runtime-selection.env"
+fi
 if [ -f "$RUNTIME_ENV" ]; then
     source "$RUNTIME_ENV"
 else

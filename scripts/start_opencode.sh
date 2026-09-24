@@ -9,7 +9,11 @@ if ! command -v opencode &> /dev/null; then
     python3 -c "import sys; sys.exit(1)"
 fi
 
-RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+if [ -f "/kaggle/working/runtime-selection.env" ]; then
+    RUNTIME_ENV="/kaggle/working/runtime-selection.env"
+else
+    RUNTIME_ENV="runtime-selection.env"
+fi
 if [ -f "$RUNTIME_ENV" ]; then
     source "$RUNTIME_ENV"
 fi

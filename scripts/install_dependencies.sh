@@ -4,7 +4,11 @@ set -euo pipefail
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 echo "[$TIMESTAMP] INFO: Installing core dependencies..."
 
-export HF_HOME="${HF_HOME:-/kaggle/working/cache/huggingface}"
+if mkdir -p "/kaggle/working" 2>/dev/null; then
+    export HF_HOME="${HF_HOME:-/kaggle/working/cache/huggingface}"
+else
+    export HF_HOME="${HF_HOME:-cache/huggingface}"
+fi
 mkdir -p "$HF_HOME"
 
 python3 -m pip install --upgrade pip setuptools wheel
