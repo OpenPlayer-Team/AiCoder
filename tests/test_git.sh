@@ -16,7 +16,7 @@ if grep -q "\.env" .gitignore && grep -q "secrets/" .gitignore; then
     echo "[PASS] .gitignore correctly protects sensitive files and tokens."
 else
     echo "[FAIL] .gitignore missing security filters."
-    python3 -c "import sys; sys.exit(1)"
+    exit 1
 fi
 
 echo "[PASS] Git test completed."

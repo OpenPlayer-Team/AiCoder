@@ -6,7 +6,7 @@ echo "[$TIMESTAMP] [INFO] [OPENCODE] Configuring OpenCode provider integration..
 
 if ! command -v opencode &> /dev/null; then
     echo "[$TIMESTAMP] [ERROR] [OPENCODE] opencode command not found. Run scripts/install_opencode.sh first."
-    python3 -c "import sys; sys.exit(1)"
+    exit 1
 fi
 
 RUNTIME_ENV="/kaggle/working/runtime-selection.env"

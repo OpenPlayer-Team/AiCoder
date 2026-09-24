@@ -16,7 +16,7 @@ if [ -f "config/opencode.json" ]; then
     echo "[PASS] config/opencode.json valid configuration file exists."
 else
     echo "[FAIL] config/opencode.json missing."
-    python3 -c "import sys; sys.exit(1)"
+    exit 1
 fi
 
 echo "[PASS] OpenCode test completed."
