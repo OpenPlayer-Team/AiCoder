@@ -31,7 +31,7 @@ JSON_PAYLOAD
         echo "[PASS] Streaming SSE response chunks and [DONE] marker verified."
     else
         echo "[FAIL] Streaming response missing required SSE chunks or termination marker."
-        python3 -c "import sys; sys.exit(1)"
+        exit 1
     fi
 fi
 

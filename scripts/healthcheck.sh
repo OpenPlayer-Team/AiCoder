@@ -19,7 +19,7 @@ if lsof -t -i :8000 > /dev/null 2>&1 || nc -z 127.0.0.1 8000 2>/dev/null; then
     echo "[PASS] HTTP Server listening on port 8000."
 else
     echo "[FAIL] HTTP server port 8000 unreachable."
-    python3 -c "import sys; sys.exit(1)"
+    exit 1
 fi
 
 # Test 3: /v1/models endpoint
@@ -28,7 +28,7 @@ if echo "$MODELS_RESP" | grep -q "object"; then
     echo "[PASS] vLLM /v1/models endpoint active."
 else
     echo "[FAIL] /v1/models API endpoint returned invalid response."
-    python3 -c "import sys; sys.exit(1)"
+    exit 1
 fi
 
 # Test 4: Dynamic Chat Completion Test
@@ -51,7 +51,7 @@ if echo "$COMPLETION_RESP" | grep -q "choices"; then
     echo "[PASS] Dynamic Chat completion test successful (Model: $ACTIVE_MODEL)."
 else
     echo "[FAIL] Chat completion test failed."
-    python3 -c "import sys; sys.exit(1)"
+    exit 1
 fi
 
 echo "[$TIMESTAMP] [INFO] [HEALTHCHECK] All core healthchecks PASSED."

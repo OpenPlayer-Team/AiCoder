@@ -36,7 +36,7 @@ JSON_PAYLOAD
     else
         echo "[FAIL] Chat completion response structure invalid."
         echo "Raw response: $RESPONSE"
-        python3 -c "import sys; sys.exit(1)"
+        exit 1
     fi
 fi
 

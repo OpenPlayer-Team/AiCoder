@@ -81,5 +81,5 @@ if [ "$SUCCESS" = false ]; then
     echo "[$TIMESTAMP] [ERROR] [VLLM] vLLM server launch failed across all context windows."
     echo "[$TIMESTAMP] [ERROR] [VLLM] Recent logs from $VLLM_LOG:"
     tail -n 25 "$VLLM_LOG" || true
-    python3 -c "import sys; sys.exit(1)"
+    exit 1
 fi

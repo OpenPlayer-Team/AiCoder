@@ -16,7 +16,7 @@ else
     if ! command -v opencode &> /dev/null; then
         echo "[$TIMESTAMP] [ERROR] [OPENCODE] Failed to install real OpenCode binary via npm."
         echo "[$TIMESTAMP] [ERROR] [OPENCODE] Genuine OpenCode CLI agent is required. Aborting installation."
-        python3 -c "import sys; sys.exit(1)"
+        exit 1
     else
         VER=$(opencode --version 2>/dev/null || echo "installed")
         echo "[$TIMESTAMP] [INFO] [OPENCODE] OpenCode successfully installed (version: $VER)."
